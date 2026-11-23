@@ -22,23 +22,15 @@ def ch6_drawings(fig_paths):
     """
 
     def _sec_fig(path, title, label=None):
-        """Figure block: image first, numbered below. Placeholder if no path."""
+        """Return a numbered image block when CAD data was captured."""
+        if not path:
+            return ''
         label_tex = (r'\label{' + label + '}\n') if label else ''
-        if path:
-            p = path.replace('\\', '/')
-            return (r'\begin{figure}[H]' + '\n'
-                    r'\centering' + '\n'
-                    r'\vspace{4pt}' + '\n'
-                    r'\includegraphics[width=0.85\textwidth]{' + p + '}\n'
-                    r'\caption{' + title + '}\n'
-                    + label_tex
-                    + r'\end{figure}' + '\n'
-                    )
+        p = path.replace('\\', '/')
         return (r'\begin{figure}[H]' + '\n'
                 r'\centering' + '\n'
-                r'\fbox{\parbox{0.97\textwidth}{' + '\n'
-                r'\textit{[ PLACEHOLDER: ' + ' ' + title + r' ]}' + '\n'
-                r'}}' + '\n'
+                r'\vspace{4pt}' + '\n'
+                r'\includegraphics[width=0.85\textwidth]{' + p + '}\n'
                 r'\caption{' + title + '}\n'
                 + label_tex
                 + r'\end{figure}' + '\n')
@@ -52,13 +44,12 @@ def ch6_drawings(fig_paths):
     cbdia  = _sec_fig(fig_paths.get('cb_diagram'),         'Cross Bracing Layout',             'fig:cb-layout')
 
     def _sec_cell(path, title, label=None):
-        """One minipage cell: image above, numbered below (for side-by-side row)."""
+        """One minipage cell, omitted when its CAD image was not captured."""
+        if not path:
+            return ''
         label_tex = (r'\label{' + label + '}') if label else ''
-        if path:
-            p = path.replace('\\', '/')
-            body = r'\includegraphics[width=\linewidth]{' + p + '}'
-        else:
-            body = r'\fbox{\parbox{0.95\linewidth}{\centering\textit{[ ' + title + r' ]}}}'
+        p = path.replace('\\', '/')
+        body = r'\includegraphics[width=\linewidth]{' + p + '}'
         return (r'\begin{minipage}[t]{0.31\textwidth}' + '\n'
                 r'\centering' + '\n'
                 + body + '\n'
@@ -84,14 +75,8 @@ def ch6_drawings(fig_paths):
         'Cross Bracing -- Bottom Chord Section',
         'fig:cb-bottom-chord'
     )
-    cb_sections_row = (
-    r'\noindent' + '\n'
-    + cb_bracing + '\n'
-    + r'\hfill' + '\n'
-    + cb_top + '\n'
-    + r'\hfill' + '\n'
-    + cb_bottom
-)
+    cb_sections = [cell for cell in (cb_bracing, cb_top, cb_bottom) if cell]
+    cb_sections_row = (r'\noindent' + '\n' + (r'\hfill' + '\n').join(cb_sections)) if cb_sections else ''
 
     eddia  = _sec_fig(fig_paths.get('ed_diagram'),        'End Diaphragm Layout',              'fig:ed-layout')
 
@@ -113,50 +98,26 @@ def ch6_drawings(fig_paths):
         'End Diaphragm -- Bottom Chord Section',
         'fig:ed-bottom-chord'
     )
-    ed_sections_row = (
-    r'\noindent' + '\n'
-    + ed_bracing + '\n'
-    + r'\hfill' + '\n'
-    + ed_top + '\n'
-    + r'\hfill' + '\n'
-    + ed_bottom
-)
+    ed_sections = [cell for cell in (ed_bracing, ed_top, ed_bottom) if cell]
+    ed_sections_row = (r'\noindent' + '\n' + (r'\hfill' + '\n').join(ed_sections)) if ed_sections else ''
 
-    return (r"""
-\chapter{Drawings and Visualizations}
-\label{ch:drawings}
+    sections = []
+    bridge_layout = ''.join((sup3d, cs, gtop))
+    girder_views = ''.join((g3d, gxsec, gside))
+    bracing_views = ''.join((cbdia, cb_sections_row))
+    diaphragm_views = ''.join((eddia, ed_sections_row))
+    if bridge_layout:
+        sections.append(r'\section{Bridge Configuration and Layout}' + '\n' + bridge_layout)
+    if girder_views:
+        sections.append(r'\section{Plate Girder --- Detailed Views}' + '\n' + girder_views)
+    if bracing_views:
+        sections.append(r'\section{Cross Bracing Detail}' + '\n' + bracing_views)
+    if diaphragm_views:
+        sections.append(r'\section{End Diaphragm Detail}' + '\n' + diaphragm_views)
+    if not sections:
+        sections.append(r'\textit{No CAD drawing images were captured for this design run.}')
 
-This section presents CAD-generated views of the designed bridge and its components. All views are generated automatically by OsdagBridge using pythonOCC.
-
-\section{Bridge Configuration and Layout}
-\label{sec:bridge-layout}
-
-"""
-            + sup3d + '\n\n'
-            + cs + '\n\n'
-            + gtop + r"""
-
-\section{Plate Girder --- Detailed Views}
-\label{sec:girder-views}
-
-"""
-            + g3d + '\n\n'
-            + gxsec + '\n\n'
-            + gside + r"""
-
-\section{Cross Bracing Detail}
-\label{sec:bracing-detail}
-
-"""
-            + cbdia + '\n\n'
-            + cb_sections_row + r"""
-            
-
-\section{End Diaphragm Detail}
-\label{sec:diaphragm-detail}
-
-"""
-            + eddia + '\n\n'
-            + ed_sections_row + r"""
-
-""")
+    return (r'\chapter{Drawings and Visualizations}' + '\n'
+            r'\label{ch:drawings}' + '\n'
+            r'This section presents CAD-generated views of the designed bridge and its components.'
+            + '\n\n' + '\n\n'.join(sections))

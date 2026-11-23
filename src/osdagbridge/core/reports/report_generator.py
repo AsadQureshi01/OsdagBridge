@@ -119,6 +119,9 @@ from osdagbridge.core.utils.common import (
 )
 
 from osdagbridge.core.reports.report_utils import _tex
+from osdagbridge.core.reports import styles as report_styles
+from osdagbridge.core.reports import tables as report_tables
+from osdagbridge.core.reports import charts as report_charts
 from .executive_summary import executive_summary
 from .chap1 import ch1_project_info
 from .chap2 import ch2_input_parameters
@@ -148,133 +151,10 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def preamble(project_name, job_number, report_date, report_version='Rev 0'):
-    pn = _tex(project_name)
-    jn = _tex(job_number)
-    rd = _tex(report_date)
-    rv = _tex(report_version)
-    return r"""
-\documentclass[12pt,a4paper]{report}
+    return report_styles.build_preamble(
+        _tex(project_name), _tex(job_number), _tex(report_date), _tex(report_version)
+    )
 
-% Packages
-\usepackage[a4paper, margin=1in]{geometry}
-\usepackage{graphicx}
-\usepackage{amsmath}
-\usepackage{amssymb}
-\usepackage{booktabs}
-\usepackage{array}
-\usepackage{tabularx}
-\usepackage{float}
-\usepackage{fancyhdr}
-\usepackage[hidelinks]{hyperref}
-\usepackage{xcolor}
-\usepackage{setspace}
-\usepackage{enumitem}
-\usepackage{caption}
-
-\captionsetup{
-    labelfont=bf,
-    justification=raggedright,
-    singlelinecheck=false,
-    format=plain
-}
-\usepackage{subcaption}
-\usepackage{multirow}
-\usepackage{colortbl}
-\usepackage{longtable}
-\setlength{\LTleft}{\fill}
-\setlength{\LTright}{\fill}
-\usepackage{titlesec}
-\usepackage{titletoc}
-\usepackage{lastpage}
-\usepackage{makecell}
-\usepackage{etoolbox}
-\usepackage{needspace}
-
-\numberwithin{table}{chapter}
-\numberwithin{figure}{chapter}
-% Table layout and spacing: consistent padding, row height, and longtable pre/post skips
-\setlength{\tabcolsep}{6pt}
-\renewcommand{\arraystretch}{1.12}
-\setlength{\LTpre}{0pt}
-\setlength{\LTpost}{6pt}
-% Table rules (outline thickness) and small extra row height for clarity
-\setlength{\arrayrulewidth}{0.5pt}
-\setlength{\extrarowheight}{0.6pt}
-
-% Prevent tables from overflowing past the page bottom:
-% if fewer than 5 baseline-skips remain, break to the next page first.
-\BeforeBeginEnvironment{table}{\needspace{5\baselineskip}}
-\BeforeBeginEnvironment{longtable}{\needspace{5\baselineskip}}
-
-\definecolor{osdagGreen}{HTML}{91B014}
-
-\fancypagestyle{main}{
-  \fancyhf{}
-  \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
-  \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
-  \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
-  \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
-  \renewcommand{\footrule}{%
-    \ifbool{hasSDonPage}{%
-      \vspace{-20pt}%
-      \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
-      \vspace{4pt}%
-    }{%
-      \vspace{-8pt}%
-    }%
-    \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
-  }
-}
-\fancypagestyle{plain}{
-  \fancyhf{}
-  \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
-  \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
-  \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
-  \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
-  \renewcommand{\footrule}{%
-    \ifbool{hasSDonPage}{%
-      \vspace{-20pt}%
-      \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
-      \vspace{4pt}%
-    }{%
-      \vspace{-8pt}%
-    }%
-    \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
-  }
-}
-\fancypagestyle{firstpage}{
-  \fancyhf{}
-  \renewcommand{\headrulewidth}{0pt}
-  \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
-  \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\footrule}{\vspace{-8pt}\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}}
-}
-\pagestyle{main}
-\setstretch{1.15}
-
-% Custom Commands
-\newcommand{\placeholder}[1]{\textit{\textless #1\textgreater}}
-\newcommand{\todo}[1]{\colorbox{yellow}{TODO: #1}}
-\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
-\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
-
-% Software-default asterisk
-\newcommand{\sdstar}{\textsuperscript{*}}
-\newbool{hasSDonPage}
-\boolfalse{hasSDonPage}
-\newcommand{\markSD}{\global\booltrue{hasSDonPage}}
-\renewcommand{\sdstar}{\textsuperscript{*}\markSD{}}
-\AddToHook{shipout/before}{\global\boolfalse{hasSDonPage}}
-
-\title{\Large\textbf{OsdagBridge} \\ \normalsize Open Source Software for Steel Girder Bridge Design \\ \vspace{2cm} \large Design Report}
-\author{}
-\date{}
-
-\begin{document}
-"""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -833,6 +713,138 @@ _FIGURE_MAP = [
     ('defl_ll',               'defl_ll.png'),
 ]
 
+
+def _collect_ur_records(output_dict):
+    """Collect chartable design ratios from the structured design results."""
+    records = []
+    output_dict = output_dict or {}
+
+    def add_ratio(element, label, value):
+        try:
+            ratio = float(value)
+        except (TypeError, ValueError):
+            return
+        if ratio >= 0 and ratio < float("inf"):
+            records.append({"element": element, "label": label, "ur": ratio})
+
+    design = (output_dict or {}).get("design_results", {}) or {}
+    per_girder = design.get("per_girder", {}) if isinstance(design, dict) else {}
+    for girder, data in (per_girder or {}).items():
+        if str(girder).startswith("EB") or not isinstance(data, dict):
+            continue
+        for check in data.get("checks", []) or []:
+            if isinstance(check, dict) and check.get("dcr") is not None:
+                add_ratio("Steel Plate Girders",
+                          f"{girder}: {check.get('check_id', check.get('id', 'Check'))}",
+                          check.get("dcr"))
+
+    # Deck calculations publish demand/capacity fields in a separate report
+    # payload; they are not nested under deck_design_results as DCR values.
+    from osdagbridge.core.utils import common as report_keys
+    deck = output_dict.get("deck_report_values", {}) or {}
+    for label, demand_key, capacity_key in (
+        ("Flexure (sagging)", report_keys.KEY_DD_M_ULS_SAG, report_keys.KEY_DD_MU_BOT),
+        ("Flexure (hogging)", report_keys.KEY_DD_M_ULS_HOG, report_keys.KEY_DD_MU_TOP),
+        ("Punching shear", report_keys.KEY_DD_PUNCH_VED, report_keys.KEY_DD_VRD_C_MPA),
+        ("One-way shear", report_keys.KEY_DD_SHEAR_VED, report_keys.KEY_DD_SHEAR_VRDC),
+    ):
+        try:
+            demand, capacity = float(deck[demand_key]), float(deck[capacity_key])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if capacity > 0:
+            add_ratio("Concrete Deck Slab", label, demand / capacity)
+    try:
+        crack_limit = float(deck[report_keys.KEY_DD_WK_LIMIT])
+        crack_demand = max(float(deck[report_keys.KEY_DD_WK_BOT]),
+                           float(deck[report_keys.KEY_DD_WK_TOP]))
+        if deck.get(report_keys.KEY_DD_HAS_OVERHANG):
+            crack_demand = max(crack_demand, float(deck[report_keys.KEY_DD_WK_OH]))
+        if crack_limit > 0:
+            add_ratio("Concrete Deck Slab", "Crack width", crack_demand / crack_limit)
+    except (KeyError, TypeError, ValueError):
+        pass
+
+    # Osdag member checks store their UR in flat result dictionaries, so
+    # traverse the known pair/member/force shape and extract the canonical key.
+    from osdagbridge.core.bridge_types.plate_girder.results_data import _extract_osdag_summary
+    for result_key, category in (
+        ("crossbracing_design_results", "Cross Bracing"),
+        ("end_diaphragm_design_results", "End Diaphragms"),
+    ):
+        pairs = output_dict.get(result_key, {}) or {}
+        if not isinstance(pairs, dict):
+            continue
+        for pair, members in pairs.items():
+            if not isinstance(members, dict):
+                continue
+            for member, force_results in members.items():
+                if not isinstance(force_results, dict):
+                    continue
+                for force, result in force_results.items():
+                    if not isinstance(result, dict):
+                        continue
+                    summary = _extract_osdag_summary(result)
+                    add_ratio(category, f"{pair} {member} {force}", summary.get("efficiency"))
+
+    # Chapter 5 currently designs cross-braced end diaphragms through the
+    # cross-bracing module and reuses those governing member checks in its
+    # end-diaphragm capacity table. Mirror those checks into the ED chart
+    # category only when the output confirms that an ED is configured as
+    # cross bracing and no ED-specific UR was published.
+    has_end_diaphragm_bracing = any(
+        "end_diaphragm_details" in str(key).lower()
+        and "type" in str(key).lower()
+        and "brac" in str(value).strip().lower()
+        for key, value in output_dict.items()
+    )
+    has_ed_records = any(r["element"] == "End Diaphragms" for r in records)
+    if has_end_diaphragm_bracing and not has_ed_records:
+        cross_bracing_records = [
+            record for record in records if record["element"] == "Cross Bracing"
+        ]
+        records.extend(
+            {**record, "element": "End Diaphragms",
+             "label": "ED " + record["label"]}
+            for record in cross_bracing_records
+        )
+    return records
+
+
+def _make_report_charts(payload, image_dir):
+    """Create report charts in the temporary image directory; return TeX paths."""
+    paths = {}
+    ur_records = _collect_ur_records(payload.output_dict)
+    try:
+        generated = report_charts.ur_summary_chart(ur_records, image_dir, "ur_summary")
+        if generated:
+            paths["ur_summary"] = "images/" + os.path.basename(generated)
+    except Exception as exc:
+        logger.warning("Could not generate utilization summary chart: %s", exc)
+
+    inputs = payload.inputs
+    steel_items = [
+        {"label": "Girders", "value": inputs.get("steel_girders_wt_total"), "color": "girders"},
+        {"label": "Cross bracing", "value": inputs.get("steel_bracing_wt_total"), "color": "bracing"},
+        {"label": "End diaphragms", "value": inputs.get("steel_end_diaphragm_wt_total"), "color": "diaphragm"},
+    ]
+    try:
+        steel = report_charts.steel_tonnage_chart(steel_items, image_dir)
+    except Exception as exc:
+        logger.warning("Could not generate steel quantity chart: %s", exc)
+        steel = None
+    if steel:
+        paths["steel_tonnage"] = "images/" + os.path.basename(steel)
+    try:
+        concrete_rebar = report_charts.concrete_rebar_chart(
+            inputs.get("concrete_deck_vol_total"), inputs.get("rebar_deck_wt_total"), image_dir)
+    except Exception as exc:
+        logger.warning("Could not generate concrete/rebar chart: %s", exc)
+        concrete_rebar = None
+    if concrete_rebar:
+        paths["concrete_rebar"] = "images/" + os.path.basename(concrete_rebar)
+    return paths
+
 def generate_report(payload, request):
     # type: (ReportPayload, ReportRequest) -> ReportResult
     """Compile the full OsdagBridge Design Report to PDF (+ .tex source)."""
@@ -898,6 +910,7 @@ def generate_report(payload, request):
             # Compute and inject quantities for Chapter 7
             quantities = calculate_material_quantities(payload.inputs, payload.output_dict)
             payload.inputs.update(quantities)
+            chart_paths = _make_report_charts(payload, tmp_images)
 
             # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
             bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
@@ -924,11 +937,11 @@ def generate_report(payload, request):
             if 'analysis' in secs:
                 doc_parts.append(ch4_analysis(payload.analysis_summary, fig_paths, bridge, span_m))
             if 'design_checks' in secs:
-                doc_parts.append(ch5_design_checks(payload.design_checks, bridge))
+                doc_parts.append(ch5_design_checks(payload.design_checks, bridge, chart_paths))
             if 'drawings' in secs and payload.options.include_figures:
                 doc_parts.append(ch6_drawings(fig_paths))
 
-            doc_parts.append(ch7_quantities(payload.inputs))
+            doc_parts.append(ch7_quantities(payload.inputs, chart_paths))
 
             mode = str(payload.inputs.get(KEY_DESIGN_MODE, "Optimized")).strip().lower()
             is_custom = mode in {"custom", "customized"}
@@ -939,13 +952,11 @@ def generate_report(payload, request):
             doc_parts.append(references())
             doc_parts.append(r"\end{document}")
 
-            full_tex = "\n".join(doc_parts)
+            full_tex = report_tables.finalize_tex("\n".join(doc_parts))
 
 
-            # NOTE: longtable header repetition is handled per-table in each
-            # chapter file (e.g. \endfirsthead / \endhead).  No automatic
-            # post-processing is applied here to avoid mis-ordering captions
-            # and column headings.
+            # Apply shared table layout rules, including repeated headers for
+            # legacy chapter longtables and keeping multirow blocks together.
 
             tmp_tex = os.path.join(tmp_dir, request.file_stem + '.tex')
             tmp_pdf = os.path.join(tmp_dir, request.file_stem + '.pdf')

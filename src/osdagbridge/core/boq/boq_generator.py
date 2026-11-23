@@ -11,6 +11,7 @@ from osdagbridge.core.utils.common import (
     KEY_TS_NO_OF_GIRDERS,
     KEY_TS_DECK_THICKNESS,
     KEY_TS_GIRDER_SPACING,
+    KEY_MP_GIRDER_DEPTH,
 )
 
 logger = logging.getLogger("osdagbridge.core.boq_generator")
@@ -47,6 +48,11 @@ def calculate_material_quantities(inputs: dict, outputs: dict) -> dict:
         "steel_bracing_vol_total": "N.A.",
         "steel_bracing_wt_single": "N.A.",
         "steel_bracing_wt_total": "N.A.",
+        "steel_end_diaphragm_vol_formula": "N.A.",
+        "steel_end_diaphragm_qty": "N.A.",
+        "steel_end_diaphragm_vol_total": "N.A.",
+        "steel_end_diaphragm_wt_single": "N.A.",
+        "steel_end_diaphragm_wt_total": "N.A.",
 
         "bracing_top_vol_formula": r"\placeholder{Area $\times$ Length}",
         "bracing_top_qty": "N.A.",
@@ -90,6 +96,21 @@ def calculate_material_quantities(inputs: dict, outputs: dict) -> dict:
         "crash_barrier_wt_single": "N.A.",
         "crash_barrier_wt_total": "N.A.",
     }
+
+    def _number(value):
+        try:
+            number = float(value)
+            return number if math.isfinite(number) else None
+        except (TypeError, ValueError):
+            return None
+
+    def _enabled(value, default=False):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"yes", "true", "1", "on", "checked"}
+
     try:
         span_val = inputs.get(KEY_SPAN)
         n_girders_val = inputs.get(KEY_TS_NO_OF_GIRDERS)
@@ -329,6 +350,113 @@ def calculate_material_quantities(inputs: dict, outputs: dict) -> dict:
                 quantities[f"{prefix}_vol_total"] = "N.A."
                 quantities[f"{prefix}_wt_single"] = "N.A."
                 quantities[f"{prefix}_wt_total"] = "N.A."
+
+        # Store the aggregate used by Chapter 7's steel quantity chart.
+        bracing_weights = [_number(quantities.get(f"bracing_{part}_wt_total"))
+                           for part in ("top", "bot", "diag")]
+        bracing_volumes = [_number(quantities.get(f"bracing_{part}_vol_total"))
+                           for part in ("top", "bot", "diag")]
+        bracing_counts = [_number(quantities.get(f"bracing_{part}_qty"))
+                          for part in ("top", "bot", "diag")]
+        if all(value is not None for value in bracing_weights):
+            quantities["steel_bracing_wt_total"] = f"{sum(bracing_weights):.2f}"
+        if all(value is not None for value in bracing_volumes):
+            quantities["steel_bracing_vol_total"] = f"{sum(bracing_volumes):.3f}"
+        if all(value is not None for value in bracing_counts):
+            quantities["steel_bracing_qty"] = str(int(sum(bracing_counts)))
+
+        # End-diaphragm weights use the designed section masses and member
+        # lengths from the bridge geometry. Unknown/missing sections remain N.A.
+        ed_total_kg = 0.0
+        ed_member_count = 0
+        ed_complete = spacing > 0.0
+        try:
+            depth_mm = _number(resolve_girder_value(
+                inputs, KEY_MP_GIRDER_DEPTH, 0))
+        except Exception:
+            depth_mm = None
+        if not depth_mm or depth_mm <= 0:
+            ed_complete = False
+        depth_m = (depth_mm / 1000.0) if depth_mm and depth_mm > 0 else 0.0
+        diagonal_height_m = 0.85 * depth_m
+        outputs = outputs or {}
+
+        for pair_index in range(1, n_girders):
+            pair_id = f"G{pair_index}G{pair_index + 1}"
+            # Runtime outputs use details.<pair>.type (the legacy input key is
+            # details.type.<pair>.<member>), so accept both historical forms.
+            ed_type = outputs.get(
+                f"member_properties.end_diaphragm_details.{pair_id}.type")
+            if not ed_type:
+                ed_type = outputs.get(
+                    f"member_properties.end_diaphragm_details.type.{pair_id}")
+            if not ed_type:
+                suffix = f".{pair_id}.E{pair_index}M1"
+                ed_type = inputs.get(f"member_properties.end_diaphragm_details.type{suffix}")
+                if not ed_type:
+                    ed_type = inputs.get(
+                        f"member_properties.end_diaphragm_details.type.{pair_id}.E{pair_index}M2")
+            if not ed_type:
+                ed_complete = False
+                continue
+
+            mass_key = (
+                "transverse_member_design.ed.section_properties."
+                f"end_diaphragm.{pair_id}.M"
+            )
+            if str(ed_type).strip().lower() == "cross bracing":
+                diag_mass = _number(outputs.get(mass_key))
+                if diag_mass is None or diag_mass <= 0 or not diagonal_height_m:
+                    ed_complete = False
+                    continue
+                bracing_type = outputs.get(
+                    f"member_properties.end_diaphragm_details.{pair_id}.bracing_type", "X")
+                horizontal_m = spacing if str(bracing_type).strip().upper() in {"X", "X-BRACING"} else spacing / 2.0
+                diagonal_length_m = math.hypot(horizontal_m, diagonal_height_m)
+                ed_total_kg += diag_mass * diagonal_length_m * 4
+                ed_member_count += 4
+
+                for chord, chord_mass_key in (
+                    ("top", "transverse_member_design.ed.section_properties.top_chord"),
+                    ("bottom", "transverse_member_design.ed.section_properties.bottom_chord"),
+                ):
+                    enabled = outputs.get(
+                        f"member_properties.end_diaphragm_details.{pair_id}.{chord}_chord")
+                    if enabled is None:
+                        enabled = inputs.get(
+                            f"member_properties.end_diaphragm_details.{chord}_chord."
+                            f"{pair_id}.E{pair_index}M1")
+                    if not _enabled(enabled):
+                        continue
+                    chord_mass = _number(outputs.get(f"{chord_mass_key}.{pair_id}.M"))
+                    if chord_mass is None or chord_mass <= 0:
+                        ed_complete = False
+                        continue
+                    ed_total_kg += chord_mass * spacing * 2
+                    ed_member_count += 2
+            elif str(ed_type).strip().lower() in {"rolled beam", "welded beam"}:
+                mass = _number(outputs.get(mass_key))
+                length = _number(outputs.get(
+                    f"transverse_member_design.ed.section_properties."
+                    f"end_diaphragm.{pair_id}.L")) or spacing
+                if mass is None or mass <= 0 or length <= 0:
+                    ed_complete = False
+                    continue
+                ed_total_kg += mass * length * 2
+                ed_member_count += 2
+            else:
+                ed_complete = False
+
+        if ed_complete and ed_member_count:
+            ed_weight_mt = ed_total_kg / 1000.0
+            ed_volume_m3 = ed_total_kg / 7_850.0
+            quantities["steel_end_diaphragm_vol_formula"] = (
+                r"$\sum (m\,L)$ using designed member masses and bridge geometry"
+            )
+            quantities["steel_end_diaphragm_qty"] = str(ed_member_count)
+            quantities["steel_end_diaphragm_vol_total"] = f"{ed_volume_m3:.3f}"
+            quantities["steel_end_diaphragm_wt_single"] = f"{ed_weight_mt / ed_member_count:.4f}"
+            quantities["steel_end_diaphragm_wt_total"] = f"{ed_weight_mt:.2f}"
 
         # 6. Crash Barrier (Cu.m) and Weight (MT)
         KEY_CB_AREA = "typical_section.crash_barrier.area"

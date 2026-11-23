@@ -888,18 +888,29 @@ class IRC6_2017:
     def cl_211_2_braking_force(design_lanes):
         """
         Returns braking force as per IRC:6-2017 Clause 211.2.
+
+        The first train contributes 20 percent, one succeeding train contributes
+        10 percent when a second lane is present, and every lane beyond two
+        contributes 5 percent of the Class 70R wheeled train load. The force is
+        returned in tonnes, consistent with the vehicle wheel-load tables.
+
         Returns:
             float: Braking force in t (rounded to 3 decimal places)
         """
-        for lane in range(1, design_lanes + 1):
-            if lane == 1 or lane == 2:
-                wheel_load = IRC6_2017.cl_204_1_ClassA_vehicle()['wheel_loads']
-                braking_force_1 = 0.20 * sum(wheel_load)  # t
-            if lane > 2:
-                wheel_load = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()['wheel_loads']
-                braking_force_2 = 0.05 * sum(wheel_load)  # t
-            
-            total_braking_force = braking_force_1 + braking_force_2
+        try:
+            lanes = max(0, int(design_lanes))
+        except (TypeError, ValueError):
+            return 0.0
+        if lanes == 0:
+            return 0.0
+
+        class_a_load = sum(IRC6_2017.cl_204_1_ClassA_vehicle()['wheel_loads'])
+        total_braking_force = 0.20 * class_a_load
+        if lanes >= 2:
+            total_braking_force += 0.10 * class_a_load
+        if lanes > 2:
+            class_70r_load = sum(IRC6_2017.cl_204_1_Class70R_vehicle_wheel()['wheel_loads'])
+            total_braking_force += 0.05 * class_70r_load * (lanes - 2)
         return round(total_braking_force, 3)
     
     @staticmethod

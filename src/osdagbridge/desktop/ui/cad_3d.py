@@ -612,6 +612,8 @@ class CAD3DWindow(QWidget):
         girder_top is NOT captured here; output_dock adds it via QBuffer.
         """
         import os, tempfile, logging
+        from PySide6.QtCore import QBuffer, QIODevice
+        from PySide6.QtWidgets import QApplication
         _log = logging.getLogger(__name__)
 
         if not self._is_display_ready():
@@ -620,7 +622,6 @@ class CAD3DWindow(QWidget):
 
         ALL         = ['Girder', 'Deck', 'Cross Bracing', 'Crash Barrier', 'Median', 'Railing']
         GIRDER_ONLY = ['Girder']
-        GIRDER_DECK = ['Girder', 'Deck']
 
         def _snap(attr, components, view_fn):
             """Set visibility, render, read PNG bytes, delete temp file. Returns bytes or None."""
@@ -629,13 +630,41 @@ class CAD3DWindow(QWidget):
                 self.update_component_visibility(components)
                 view_fn()
                 self.display.FitAll()
+                self.display.Repaint()
+                QApplication.processEvents()
+
+                # ExportToImage may return without writing when the native
+                # view has not completed a paint yet. Do not leave an empty
+                # NamedTemporaryFile in place: checking only exists() would
+                # mistake that zero-byte file for a captured drawing.
                 tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
                 tmp_path = tmp.name
                 tmp.close()
-                self.display.ExportToImage(tmp_path)
-                if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+                export_result = self.display.ExportToImage(tmp_path)
+                if (os.path.isfile(tmp_path)
+                        and os.path.getsize(tmp_path) > 64):
                     with open(tmp_path, 'rb') as fh:
-                        return fh.read()
+                        image_bytes = fh.read()
+                    if image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                        return image_bytes
+
+                _log.warning(
+                    "capture_for_report: %s ExportToImage produced no valid PNG (result=%r)",
+                    attr, export_result)
+
+                # Fallback to Qt's paint capture for a mapped CAD viewport.
+                # This keeps report generation usable on OCCT builds where
+                # ExportToImage silently fails for a newly-created view.
+                pixmap = self.viewer.grab()
+                if not pixmap.isNull():
+                    buffer = QBuffer()
+                    buffer.open(QIODevice.WriteOnly)
+                    if pixmap.save(buffer, 'PNG'):
+                        image_bytes = bytes(buffer.data())
+                        if image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                            return image_bytes
+                    buffer.close()
             except Exception as exc:
                 _log.warning("capture_for_report: %s failed: %s", attr, exc)
             finally:

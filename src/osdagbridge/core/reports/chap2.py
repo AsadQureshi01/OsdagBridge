@@ -71,6 +71,7 @@ from osdagbridge.core.utils.common import (
 )
 
 from osdagbridge.core.reports.report_utils import _render_value, get_girder_entries, _tex
+from osdagbridge.core.reports import styles as S
 
 def ch2_input_parameters(m, input_dict, output_dict=None):
     girder_entries = get_girder_entries(input_dict)
@@ -384,11 +385,7 @@ def _bracing_tables(input_dict, n_girders):
 \newpage
 
 \vspace{0.4em}
-\setlength{\tabcolsep}{4pt}
-\setlength\LTleft{0pt}
-\setlength\LTright{\fill}
-
-\begin{longtable}{|L{2.2cm}|L{2.2cm}|L{3.0cm}|L{2.5cm}|C{1.8cm}|C{1.8cm}|}
+\begin{longtable}{""" + S.TABLE_SPECS["cross_bracing_details"] + r"""}
 \caption{\textbf{Member Properties: Cross Bracing Details}}
 \hline
 \textbf{Location} & \textbf{Member IDs} & \textbf{Type of Bracing} & \textbf{Bracing Section} & \textbf{Spacing (m)} \\
@@ -399,11 +396,7 @@ def _bracing_tables(input_dict, n_girders):
 
 \vspace{0.4em}
 \noindent
-\setlength{\tabcolsep}{4pt}
-\setlength\LTleft{0pt}
-\setlength\LTright{\fill}
-
-\begin{longtable}{|L{2.2cm}|L{2.2cm}|L{3.0cm}|L{2.5cm}|C{1.8cm}|C{1.8cm}|}
+\begin{longtable}{""" + S.TABLE_SPECS["end_diaphragm_details"] + r"""}
 \caption{\textbf{Member Properties: End Diaphragm Details}}
 \hline
 \textbf{Location} & \textbf{Member IDs} & \textbf{Type of Bracing} & \textbf{Bracing Section} \\

@@ -55,11 +55,17 @@ def _max_member_efficiency(pair_designs):
 
 
 def executive_summary(input_dict, output_dict, fig_paths) -> str:
-    plan_fig = _fig_or_placeholder(fig_paths.get('girder_top'), 'Figure 1 -- Overall Bridge Plan')
-    cs_fig = _fig_or_placeholder(fig_paths.get('cross_section'),
-                                  'Figure 2 -- Typical Cross-Section (with girder, deck, barriers, footpath)')
-    geom_fig = _fig_or_placeholder(fig_paths.get('final_geometry'),
-                                    'Figure 3 -- 3D View of Bridge Superstructure')
+    # Do not publish placeholder boxes in a client-facing report when the CAD
+    # exporter did not provide those views.
+    plan_fig = (_fig_or_placeholder(fig_paths['girder_top'], 'Figure 1 -- Overall Bridge Plan')
+                if fig_paths.get('girder_top') else '')
+    cs_fig = (_fig_or_placeholder(
+        fig_paths['cross_section'],
+        'Figure 2 -- Typical Cross-Section (with girder, deck, barriers, footpath)')
+        if fig_paths.get('cross_section') else '')
+    geom_fig = (_fig_or_placeholder(
+        fig_paths['final_geometry'], 'Figure 3 -- 3D View of Bridge Superstructure')
+        if fig_paths.get('final_geometry') else '')
 
     # All girders share the same section, governing check, and UR.
     # The section designation is produced by the designer pipeline, so it lives
@@ -102,13 +108,6 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
                 if girder_max_ur is None or dcr > girder_max_ur:
                     girder_max_ur = dcr
 
-    if not per_girder:
-        overall_design_status = ""
-    elif failing:
-        overall_design_status = "Fail (" + ", ".join(failing) + ")"
-    else:
-        overall_design_status = "Pass"
-
     # Overall Utilization Ratio — the maximum UR across all bridge components,
     # tagged with the governing component (e.g. "1.05 (Deck slab)").
     component_urs = []                  # (ur_value, component_label)
@@ -121,11 +120,53 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
         m = _max_member_efficiency(results)
         if m is not None:
             component_urs.append((m, label))
+    ed_is_cross_braced = any(
+        "end_diaphragm_details" in str(key).lower()
+        and "type" in str(key).lower()
+        and "brac" in str(value).strip().lower()
+        for key, value in output_dict.items()
+    )
+    if ed_is_cross_braced and not any(label == "End diaphragm" for _, label in component_urs):
+        cb_max = _max_member_efficiency(cb_results)
+        if cb_max is not None:
+            component_urs.append((cb_max, "End diaphragm"))
+
+    # A report must not label the whole bridge as passing when the governing
+    # girder UR is over one, or when key component checks are unavailable.
+    failing_components = [label for value, label in component_urs if value > 1.0]
+    for check in failing:
+        if check not in failing_components:
+            failing_components.append(check)
+    if failing_components:
+        overall_design_status = "FAIL (" + ", ".join(failing_components) + ")"
+    elif len({label for _, label in component_urs}) == 4:
+        overall_design_status = "PASS"
+    elif component_urs:
+        overall_design_status = "INCOMPLETE (component checks unavailable)"
+    else:
+        overall_design_status = "Not available"
+
     if component_urs:
         max_ur, max_label = max(component_urs, key=lambda t: t[0])
         overall_utilization_ratio = f"{max_ur:.2f} ({max_label})"
     else:
         overall_utilization_ratio = ""
+
+    component_ur_by_label = {label: value for value, label in component_urs}
+
+    def _outcome(label):
+        value = component_ur_by_label.get(label)
+        if value is None:
+            return "Not available"
+        status = "PASS" if value <= 1.0 else "FAIL"
+        return f"{status} (UR: {value:.2f})"
+
+    outcomes_tex = "\n".join([
+        r"\noindent Girder design: " + _outcome("Girder") + r" \\",
+        r"\noindent Cross bracing design: " + _outcome("Cross bracing") + r" \\",
+        r"\noindent End diaphragm design: " + _outcome("End diaphragm") + r" \\",
+        r"\noindent Deck design: " + _outcome("Deck slab") + r" \\",
+    ])
 
     gov = _tex(gov_name) if gov_name not in (None, '', 'None') else ''
     ur = _tex(overall_utilization_ratio) if overall_utilization_ratio else ''
@@ -230,10 +271,7 @@ This section provides a concise summary of the bridge design, key inputs, govern
 \addcontentsline{toc}{section}{Key Design Outcomes Summary}
 \label{sec:key-outcomes}
 
-\noindent Girder design pass \\
-Cross bracing design pass \\
-End Diaphragm design pass \\
-Deck design pass
+""" + outcomes_tex + r"""
 
 \section*{Design Assumptions and Limitations}
 \addcontentsline{toc}{section}{Design Assumptions and Limitations}

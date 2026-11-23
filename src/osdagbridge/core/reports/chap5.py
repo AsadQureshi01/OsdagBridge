@@ -142,10 +142,11 @@ from osdagbridge.core.utils.common import (
 )
 
 from osdagbridge.core.reports.report_utils import _tex, _render_value, get_girder_entries
+from osdagbridge.core.reports import styles as S
 
 if TYPE_CHECKING:
     pass
-def ch5_design_checks(checks_data, bridge) -> str:
+def ch5_design_checks(checks_data, bridge, chart_paths=None) -> str:
     """Chapter 5 — Design Checks.
 
     Parameters
@@ -987,6 +988,18 @@ Fatigue Shear Resistance, $Q_r$ & IRC 22 Table 8 ($\phi d$, $N_{sc}$) & """
         r"Basic ULS: " + _tex(f"{_dkv(KEY_DD_GAMMA_DL):g}DL + {_dkv(KEY_DD_GAMMA_LL):g}LL")
     ) if _dk_has else "---"
 
+    chart_paths = chart_paths or {}
+    chart_tex = ""
+    chart_items = []
+    for key, caption in (("ur_summary", "Governing utilization ratio by structural element"),
+                         ("ur_detail", "Utilization ratio for individual design checks")):
+        path = chart_paths.get(key)
+        if path:
+            chart_items.append(S.figure_block(path, caption))
+    if chart_items:
+        chart_tex = (r"\subsection{Utilization Ratio Charts}" + "\n"
+                     + "\n\\par\n".join(chart_items) + "\n")
+
     def _deck_row(dem_key, cap_key, unit, is_oh=False):
         if not _dk_has:
             return ("---", "---", "---", "---")
@@ -1501,5 +1514,5 @@ End diaphragms at the supports transfer transverse loads to the bearings, restra
 \end{longtable}
 \noindent\textit{Note: UR = Demand / Capacity. All values $\leq 1.0$ indicate passing checks. The governing check for each component is highlighted in the individual design check sections above.}
 
-"""
+""" + chart_tex
 
